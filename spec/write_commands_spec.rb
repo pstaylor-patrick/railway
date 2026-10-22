@@ -30,7 +30,7 @@ class WriteCommandsTest < Minitest::Test
     C::Context.new(client: client, resolver: RailwayCli::Resolver.new(client, opts), opts: opts, args: args, out: @out)
   end
 
-  def project_resps = [resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } })]
+  def project_resps = [resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } })]
 
   def test_restart_with_explicit_deployment_skips_lookup
     t, calls = fake_transport(resp(200, { data: { deploymentRestart: true } }))
@@ -45,9 +45,9 @@ class WriteCommandsTest < Minitest::Test
                               resp(200, { data: { deployments: { edges: [{ node: { id: "dep_latest" } }], pageInfo: { hasNextPage: false } } } }),
                               resp(200, { data: { deploymentRedeploy: { id: "dep_new", status: "QUEUED" } } }))
     C::DeploymentAction.for("redeploy").call(ctx(t, project: "web", env: "production", service: "api"))
-    assert_equal 1, calls[2][:body]["variables"]["first"]
-    assert_equal "svc_example", calls[2][:body]["variables"]["input"]["serviceId"]
-    assert_equal({ "id" => "dep_latest" }, calls[3][:body]["variables"])
+    assert_equal 1, calls[3][:body]["variables"]["first"]
+    assert_equal "svc_example", calls[3][:body]["variables"]["input"]["serviceId"]
+    assert_equal({ "id" => "dep_latest" }, calls[4][:body]["variables"])
   end
 
   def test_action_without_deployment_or_service_is_usage_error
@@ -75,7 +75,7 @@ class WriteCommandsTest < Minitest::Test
     t, calls = fake_transport(*project_resps, resp(200, { data: { environmentTriggersDeploy: true } }),
                               resp(200, { data: { environmentTriggersDeploy: true } }))
     C::Deploy.run(ctx(t, project: "web", env: "production", all: true))
-    assert_equal %w[svc_example svc_other], calls.drop(2).map { |c| c[:body]["variables"]["input"]["serviceId"] }
+    assert_equal %w[svc_example svc_other], calls.drop(3).map { |c| c[:body]["variables"]["input"]["serviceId"] }
   end
 
   def test_deploy_needs_service_or_all
@@ -95,8 +95,8 @@ class WriteCommandsTest < Minitest::Test
     t, calls = fake_transport(*project_resps, resp(200, { data: { customDomainAvailable: { available: true } } }),
                               resp(200, { data: { customDomainCreate: created } }))
     C::Domain.run(ctx(t, { project: "web", env: "production", service: "api", custom: "app.example.com" }, ["create"]))
-    assert_includes calls[2][:body]["query"], "customDomainAvailable"
-    assert_equal "proj_example", calls[3][:body]["variables"]["input"]["projectId"]
+    assert_includes calls[3][:body]["query"], "customDomainAvailable"
+    assert_equal "proj_example", calls[4][:body]["variables"]["input"]["projectId"]
     assert_includes @out.string, "x.up.railway.app"
   end
 
@@ -105,7 +105,7 @@ class WriteCommandsTest < Minitest::Test
     assert_raises(RailwayCli::ApiError) do
       C::Domain.run(ctx(t, { project: "web", env: "production", service: "api", custom: "app.example.com" }, ["create"]))
     end
-    assert_equal 3, calls.size
+    assert_equal 4, calls.size
   end
 
   def test_env_create_from_source
@@ -123,7 +123,7 @@ class WriteCommandsTest < Minitest::Test
   end
 
   def test_project_create_with_workspace_name
-    t, calls = fake_transport(resp(200, PROJECTS_PAGE), resp(200, { data: { projectCreate: { id: "proj_new", name: "new" } } }))
+    t, calls = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, { data: { projectCreate: { id: "proj_new", name: "new" } } }))
     opts = { workspace: "ws" }
     C::ProjectWrite.run(ctx(t, opts, %w[create new]))
     assert_equal({ "name" => "new", "workspaceId" => "ws_example" }, calls.last[:body]["variables"]["input"])

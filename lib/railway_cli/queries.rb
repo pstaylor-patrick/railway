@@ -14,9 +14,13 @@ module RailwayCli
       query ProjectToken { projectToken { projectId environmentId } }
     GQL
 
+    ME_WORKSPACES = <<~GQL
+      query MeWorkspaces { me { workspaces { id } } }
+    GQL
+
     PROJECTS = <<~GQL
-      query Projects($first: Int, $after: String) {
-        projects(first: $first, after: $after) {
+      query Projects($first: Int, $after: String, $workspaceId: String) {
+        projects(first: $first, after: $after, workspaceId: $workspaceId) {
           edges { node { id name workspace { id name } } }
           pageInfo { hasNextPage endCursor }
         }

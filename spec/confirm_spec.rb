@@ -70,13 +70,13 @@ class ConfirmTest < Minitest::Test
   end
 
   def test_env_delete_unknown_name_fails_before_confirm
-    t, calls = fake_transport(resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }))
+    t, calls = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }))
     assert_raises(RailwayCli::UsageError) { RailwayCli::Commands::Environment.run(ctx(t, { project: "web" }, %w[delete nope])) }
     refute(calls.any? { |c| c[:body]["query"].include?("mutation") })
   end
 
   def test_env_delete_without_confirm_and_no_tty_mutates_nothing
-    t, calls = fake_transport(resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }))
+    t, calls = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }))
     old = $stdin
     $stdin = StringIO.new("tmp-x\n") # not a TTY
     assert_raises(Refused) { RailwayCli::Commands::Environment.run(ctx(t, { project: "web" }, %w[delete tmp-x])) }
@@ -86,7 +86,7 @@ class ConfirmTest < Minitest::Test
   end
 
   def test_env_delete_with_confirm_mutates
-    t, calls = fake_transport(resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
+    t, calls = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
                               resp(200, { data: { environmentDelete: true } }))
     assert_equal 0, RailwayCli::Commands::Environment.run(ctx(t, { project: "web", confirm: "tmp-x" }, %w[delete tmp-x]))
     assert_includes calls.last[:body]["query"], "environmentDelete"
@@ -94,7 +94,7 @@ class ConfirmTest < Minitest::Test
   end
 
   def test_vars_delete_missing_key_fails_before_confirm
-    t, = fake_transport(resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
+    t, = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
                         resp(200, { data: { variables: { "OTHER" => "x" } } }))
     assert_raises(RailwayCli::UsageError) do
       RailwayCli::Commands::Variables.run(ctx(t, { project: "web", env: "tmp-x", confirm: "KEY" }, %w[delete KEY]))

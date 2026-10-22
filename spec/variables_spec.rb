@@ -66,7 +66,7 @@ class VariablesTest < Minitest::Test
   end
 
   def test_list_masks_by_default
-    t, = fake_transport(resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
+    t, = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
                         resp(200, { data: { variables: { "DATABASE_URL" => "postgres://placeholder" } } }))
     V.run(ctx(t, project: "web", env: "production"))
     assert_match(/DATABASE_URL\s+po\*\*\*\*/, @out.string)
@@ -74,14 +74,14 @@ class VariablesTest < Minitest::Test
   end
 
   def test_list_reveal
-    t, = fake_transport(resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
+    t, = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
                         resp(200, { data: { variables: { "K" => "postgres://placeholder" } } }))
     V.run(ctx(t, project: "web", env: "production", reveal: true))
     assert_includes @out.string, "postgres://placeholder"
   end
 
   def test_diff_command_masks
-    t, calls = fake_transport(resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
+    t, calls = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
                               resp(200, { data: { variables: { "K" => "value-aaaaaa", "A" => "1" } } }),
                               resp(200, { data: { variables: { "K" => "value-bbbbbb" } } }))
     V.run(ctx(t, { project: "web", env: "production", env2: "staging" }, ["diff"]))
@@ -91,7 +91,7 @@ class VariablesTest < Minitest::Test
   end
 
   def test_set_single_uses_variable_upsert
-    t, calls = fake_transport(resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
+    t, calls = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
                               resp(200, { data: { variableUpsert: true } }))
     V.run(ctx(t, { project: "web", env: "production", service: "api", skip_deploys: true }, %w[set K=v]))
     body = calls.last[:body]
@@ -101,7 +101,7 @@ class VariablesTest < Minitest::Test
   end
 
   def test_set_many_uses_collection_upsert
-    t, calls = fake_transport(resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
+    t, calls = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
                               resp(200, { data: { variableCollectionUpsert: true } }))
     V.run(ctx(t, { project: "web", env: "production" }, %w[set A=1 B=2]))
     body = calls.last[:body]

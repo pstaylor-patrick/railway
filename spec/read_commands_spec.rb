@@ -35,7 +35,7 @@ class ReadCommandsTest < Minitest::Test
   end
 
   def test_projects_table
-    t, = fake_transport(resp(200, PROJECTS_PAGE))
+    t, = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE))
     assert_equal 0, RailwayCli::Commands::Projects.run(ctx(t))
     lines = @out.string.lines
     assert_match(/\ANAME\s+ID\s+WORKSPACE/, lines[0])
@@ -43,7 +43,7 @@ class ReadCommandsTest < Minitest::Test
   end
 
   def test_projects_json_envelope
-    t, = fake_transport(resp(200, PROJECTS_PAGE))
+    t, = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE))
     RailwayCli::Commands::Projects.run(ctx(t, json: true))
     d = JSON.parse(@out.string)
     assert d["ok"]
@@ -51,7 +51,7 @@ class ReadCommandsTest < Minitest::Test
   end
 
   def test_status_defaults_to_production
-    t, = fake_transport(resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }))
+    t, = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }))
     RailwayCli::Commands::Status.run(ctx(t, project: "web"))
     assert_includes @out.string, "environment: production"
     assert_match(/api\s+SUCCESS\s+2026-01-01T00:00:00Z\s+api\.example\.com/, @out.string)
@@ -59,7 +59,7 @@ class ReadCommandsTest < Minitest::Test
 
   def test_deployments_respects_limit_and_input
     edges = (1..3).map { |i| { node: { id: "dep#{i}", status: "SUCCESS", createdAt: "t" } } }
-    t, calls = fake_transport(resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
+    t, calls = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }),
                               resp(200, { data: { deployments: { edges: edges, pageInfo: { hasNextPage: true, endCursor: "c" } } } }))
     RailwayCli::Commands::Deployments.run(ctx(t, project: "web", env: "production", service: "api", limit: 2, json: true))
     assert_equal %w[dep1 dep2], JSON.parse(@out.string)["data"].map { |d| d["id"] }
@@ -68,7 +68,7 @@ class ReadCommandsTest < Minitest::Test
   end
 
   def test_domains_lists_service_domains
-    t, = fake_transport(resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }))
+    t, = fake_transport(resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, { data: { project: PROJECT } }))
     RailwayCli::Commands::Domains.run(ctx(t, project: "web", env: "production"))
     assert_match(/api\s+api\.example\.com\s+service/, @out.string)
   end
@@ -79,5 +79,21 @@ class ReadCommandsTest < Minitest::Test
     RailwayCli::Commands::Rate.run(ctx(t))
     assert_includes calls.last[:body]["query"], "apiToken"
     assert_match(/remaining\s+7/, @out.string)
+  end
+
+  def test_projects_lists_each_workspace_and_dedupes
+    two = { data: { me: { workspaces: [{ id: "ws_a" }, { id: "ws_b" }] } } }
+    t, calls = fake_transport(resp(200, two), resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE), resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE))
+    RailwayCli::Commands::Projects.run(ctx(t, json: true))
+    assert_equal %w[ws_a ws_b], calls[1..].map { |c| c[:body]["variables"]["workspaceId"] }
+    assert_equal 1, JSON.parse(@out.string)["data"].size
+  end
+
+  def test_projects_falls_back_to_api_token_workspaces
+    denied = { errors: [{ message: "Not Authorized" }] }
+    t, calls = fake_transport(resp(200, denied), resp(200, { data: { apiToken: { workspaces: [{ id: "ws_a" }] } } }),
+                              resp(200, WORKSPACES_PAGE), resp(200, PROJECTS_PAGE))
+    RailwayCli::Commands::Projects.run(ctx(t))
+    assert_equal "ws_a", calls[2][:body]["variables"]["workspaceId"]
   end
 end

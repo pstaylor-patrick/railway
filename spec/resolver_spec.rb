@@ -62,6 +62,7 @@ class ResolverTest < Minitest::Test
 
   def test_bearer_resolves_name_through_paginated_projects
     t, calls = fake_transport(
+      resp(200, { data: { me: { workspaces: [{ id: "ws_example" }] } } }),
       resp(200, { data: { projects: { edges: [{ node: { id: "proj_other", name: "x" } }],
                                       pageInfo: { hasNextPage: true, endCursor: "c1" } } } }),
       resp(200, { data: { projects: { edges: [{ node: { id: "proj_example", name: "web" } }],
@@ -72,7 +73,8 @@ class ResolverTest < Minitest::Test
     r = RailwayCli::Resolver.new(RailwayCli::Client.new(credential: cred, transport: t),
                                  { project: "web", env: "PRODUCTION", service: "api" })
     assert_equal "proj_example", r.project["id"]
-    assert_equal "c1", calls[1][:body]["variables"]["after"]
+    assert_equal "ws_example", calls[1][:body]["variables"]["workspaceId"]
+    assert_equal "c1", calls[2][:body]["variables"]["after"]
     assert_equal "env_example", r.environment["id"]
     assert_equal "svc_example", r.service["id"]
   end

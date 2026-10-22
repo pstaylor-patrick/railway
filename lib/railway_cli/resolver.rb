@@ -51,7 +51,24 @@ module RailwayCli
     def projects
       return [@client.query(Queries::PROJECT, { "id" => token_scope["projectId"] })["project"]].compact if project_token?
 
-      @client.paginate(Queries::PROJECTS, { "first" => 50 }, ["projects"])
+      # Unscoped `projects` misses projects in some of an account's workspaces,
+      # so list each workspace explicitly when the token can name them.
+      ids = workspace_ids
+      return @client.paginate(Queries::PROJECTS, { "first" => 50 }, ["projects"]) if ids.empty?
+
+      ids.flat_map { |id| @client.paginate(Queries::PROJECTS, { "first" => 50, "workspaceId" => id }, ["projects"]) }
+         .uniq { |p| p["id"] }
+    end
+
+    def workspace_ids
+      workspaces = begin
+        @client.query(Queries::ME_WORKSPACES).dig("me", "workspaces")
+      rescue ApiError
+        @client.query(Queries::API_TOKEN).dig("apiToken", "workspaces")
+      end
+      Array(workspaces).map { |w| w["id"] }
+    rescue ApiError
+      []
     end
 
     def environments = self.class.nodes(project["environments"])

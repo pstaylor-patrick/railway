@@ -5,6 +5,8 @@ require "json"
 $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
 
 module FakeHttp
+  WORKSPACES_PAGE = { data: { me: { workspaces: [{ id: "ws_example" }] } } }.freeze
+
   # Builds a transport returning queued responses; records requests.
   def fake_transport(*responses)
     calls = []
