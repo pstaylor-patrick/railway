@@ -5,24 +5,72 @@
 ROOT = File.expand_path("..", File.dirname(File.realpath(__FILE__)))
 $LOAD_PATH.unshift File.join(ROOT, "lib")
 
+require "optparse"
 require "railway_cli/version"
+require "railway_cli/env"
+require "railway_cli/auth"
+require "railway_cli/formatter"
+require "railway_cli/commands/whoami"
 
 HELP = <<~TEXT
-  usage: railway <command> [options]
+  usage: railway [global options] <command> [options]
 
   Personal Railway CLI on the public GraphQL API.
 
+  Global options:
+    -j, --json          JSON output
+    --project-token     use the project token (RAILWAY_PAT_PROJECT)
+
+  Commands:
+    whoami      report each token's type and identity
     --version   print version
     help        show this help
 TEXT
 
-case ARGV.first
-when "--version", "-v", "version"
-  puts "railway-pat-cli #{RailwayCli::VERSION}"
-when nil, "help", "-h", "--help"
-  puts HELP
-else
-  warn "unknown command: #{ARGV.first}"
+RailwayCli::Env.load(File.join(ROOT, ".env"))
+RailwayCli::Auth.register_tokens(ENV)
+
+opts = { json: false, project_token: false }
+args = ARGV.dup
+begin
+  OptionParser.new do |o|
+    o.on("-j", "--json") { opts[:json] = true }
+    o.on("--project-token") { opts[:project_token] = true }
+    o.on("-v", "--version") { opts[:version] = true }
+    o.on("-h", "--help") { opts[:help] = true }
+  end.order!(args)
+rescue OptionParser::ParseError => e
+  warn e.message
   warn HELP
   exit 2
+end
+
+command = args.shift
+command = "version" if opts[:version]
+command = "help" if opts[:help]
+
+begin
+  status =
+    case command
+    when "version"
+      puts "railway-pat-cli #{RailwayCli::VERSION}"
+      0
+    when nil, "help"
+      puts HELP
+      0
+    when "whoami"
+      RailwayCli::Commands::Whoami.run(ENV, json: opts[:json])
+    else
+      warn "unknown command: #{command}"
+      warn HELP
+      2
+    end
+  exit status
+rescue RailwayCli::Error => e
+  if opts[:json]
+    puts RailwayCli::Formatter.error_envelope(e)
+  else
+    warn "error: #{e.message}"
+  end
+  exit(e.is_a?(RailwayCli::UsageError) ? 2 : e.is_a?(RailwayCli::ConfirmRefused) ? 3 : 1)
 end
