@@ -27,9 +27,57 @@ module RailwayCli
       query Project($id: String!) {
         project(id: $id) {
           id name
+          workspace { id name }
           environments { edges { node { id name } } }
-          services { edges { node { id name } } }
+          services {
+            edges {
+              node {
+                id name
+                serviceInstances {
+                  edges {
+                    node {
+                      environmentId
+                      latestDeployment { id status createdAt }
+                      domains { serviceDomains { domain } customDomains { domain } }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
+      }
+    GQL
+
+    DEPLOYMENTS = <<~GQL
+      query Deployments($first: Int, $after: String, $input: DeploymentListInput!) {
+        deployments(first: $first, after: $after, input: $input) {
+          edges { node { id status createdAt staticUrl meta } }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    GQL
+
+    VOLUMES = <<~GQL
+      query Volumes($id: String!) {
+        project(id: $id) {
+          volumes {
+            edges {
+              node {
+                id name
+                volumeInstances {
+                  edges { node { id environmentId mountPath currentSizeMB sizeMB serviceId } }
+                }
+              }
+            }
+          }
+        }
+      }
+    GQL
+
+    VOLUME_BACKUPS = <<~GQL
+      query VolumeBackups($volumeInstanceId: String!) {
+        volumeInstanceBackupList(volumeInstanceId: $volumeInstanceId) { id name createdAt }
       }
     GQL
   end

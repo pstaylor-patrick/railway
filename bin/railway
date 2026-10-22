@@ -10,7 +10,28 @@ require "railway_cli/version"
 require "railway_cli/env"
 require "railway_cli/auth"
 require "railway_cli/formatter"
+require "railway_cli/client"
+require "railway_cli/resolver"
 require "railway_cli/commands/whoami"
+%w[context projects project environments services status deployments domains volumes rate].each do |c|
+  require "railway_cli/commands/#{c}"
+end
+
+# Read commands: name => [module, one-line help]. Each module runs with a Commands::Context.
+COMMANDS = {
+  "projects" => [RailwayCli::Commands::Projects, "list projects visible to the token"],
+  "project" => [RailwayCli::Commands::Project, "environments, services, last deploy status [--project]"],
+  "environments" => [RailwayCli::Commands::Environments, "list environments --project"],
+  "services" => [RailwayCli::Commands::Services, "list services --project [--env]"],
+  "status" => [RailwayCli::Commands::Status, "per-service deploy status [--project] [--env]"],
+  "deployments" => [RailwayCli::Commands::Deployments, "recent deployments --project --env --service [-n 10]"],
+  "domains" => [RailwayCli::Commands::Domains, "service and custom domains --project --env [--service]"],
+  "volumes" => [RailwayCli::Commands::Volumes, "volumes and backups --project"],
+  "rate" => [RailwayCli::Commands::Rate, "last known rate-limit headers"]
+}.freeze
+
+# Mutating commands; later phases add to this.
+WRITE_COMMANDS = [].freeze
 
 HELP = <<~TEXT
   usage: railway [global options] <command> [options]
@@ -20,9 +41,12 @@ HELP = <<~TEXT
   Global options:
     -j, --json          JSON output
     --project-token     use the project token (RAILWAY_PAT_PROJECT)
+    --project NAME|ID   --env NAME|ID   --service NAME|ID
+    -n, --limit N       max rows for list commands
 
   Commands:
-    whoami      report each token's type and identity
+    whoami        report each token's type and identity
+    #{COMMANDS.map { |n, (_, h)| format("%-13s %s", n, h) }.join("\n    ")}
     --version   print version
     help        show this help
 TEXT
@@ -32,20 +56,26 @@ RailwayCli::Auth.register_tokens(ENV)
 
 opts = { json: false, project_token: false }
 args = ARGV.dup
+parser = OptionParser.new do |o|
+  o.on("-j", "--json") { opts[:json] = true }
+  o.on("--project-token") { opts[:project_token] = true }
+  o.on("--project ID") { |v| opts[:project] = v }
+  o.on("--env ID") { |v| opts[:env] = v }
+  o.on("--service ID") { |v| opts[:service] = v }
+  o.on("-n", "--limit N", Integer) { |v| opts[:limit] = v }
+  o.on("-v", "--version") { opts[:version] = true }
+  o.on("-h", "--help") { opts[:help] = true }
+end
 begin
-  OptionParser.new do |o|
-    o.on("-j", "--json") { opts[:json] = true }
-    o.on("--project-token") { opts[:project_token] = true }
-    o.on("-v", "--version") { opts[:version] = true }
-    o.on("-h", "--help") { opts[:help] = true }
-  end.order!(args)
+  parser.order!(args)
+  command = args.shift
+  parser.permute!(args)
 rescue OptionParser::ParseError => e
   warn e.message
   warn HELP
   exit 2
 end
 
-command = args.shift
 command = "version" if opts[:version]
 command = "help" if opts[:help]
 
@@ -60,6 +90,11 @@ begin
       0
     when "whoami"
       RailwayCli::Commands::Whoami.run(ENV, json: opts[:json])
+    when *COMMANDS.keys
+      client = RailwayCli::Client.new(credential: RailwayCli::Auth.pick(ENV, project_token: opts[:project_token]))
+      ctx = RailwayCli::Commands::Context.new(client: client, resolver: RailwayCli::Resolver.new(client, opts),
+                                              opts: opts, args: args, out: $stdout)
+      COMMANDS.fetch(command).first.run(ctx)
     else
       warn "unknown command: #{command}"
       warn HELP
