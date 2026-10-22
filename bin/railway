@@ -31,23 +31,27 @@ COMMANDS = {
   "rate" => [RailwayCli::Commands::Rate, "last known rate-limit headers"],
   "logs" => [RailwayCli::Commands::Logs, "--project --env --service [--build] [--deployment ID] [-n 200] [--filter Q] [-f] [--interval 3]"],
   "vars" => [RailwayCli::Commands::Variables,
-             "[--reveal] | vars diff --env A --env2 B | vars set KEY=VALUE|KEY=- [--skip-deploys]"],
+             "[--reveal] | vars diff --env A --env2 B | vars set KEY=VALUE|KEY=- [--skip-deploys] | vars delete KEY [--confirm KEY]"],
   "redeploy" => [RailwayCli::Commands::DeploymentAction.for("redeploy"), "redeploy --deployment ID, or latest for --service"],
   "restart" => [RailwayCli::Commands::DeploymentAction.for("restart"), "restart --deployment ID, or latest for --service"],
   "rollback" => [RailwayCli::Commands::DeploymentAction.for("rollback"), "roll back to --deployment ID, or latest for --service"],
   "stop" => [RailwayCli::Commands::DeploymentAction.for("stop"), "stop --deployment ID, or latest for --service"],
   "cancel" => [RailwayCli::Commands::DeploymentAction.for("cancel"), "cancel --deployment ID, or latest for --service"],
   "deploy" => [RailwayCli::Commands::Deploy, "deploy --service S | deploy --env E --all"],
-  "domain" => [RailwayCli::Commands::Domain, "domain create --service S [--custom HOST]"],
-  "env" => [RailwayCli::Commands::Environment, "env create NAME --project P [--from E]"]
+  "domain" => [RailwayCli::Commands::Domain, "domain create --service S [--custom HOST] | domain delete HOST --env E [--confirm HOST]"],
+  "env" => [RailwayCli::Commands::Environment, "env create NAME --project P [--from E] | env delete NAME --project P [--confirm NAME]"]
 }.freeze
 
 # Subcommands routed away from a read command of the same name.
-SUBCOMMANDS = { %w[project create] => [RailwayCli::Commands::ProjectWrite, "project create NAME [--workspace W]"] }.freeze
+SUBCOMMANDS = {
+  %w[project create] => [RailwayCli::Commands::ProjectWrite, "project create NAME [--workspace W]"],
+  %w[project delete] => [RailwayCli::Commands::ProjectWrite, "project delete NAME [--confirm NAME]"]
+}.freeze
 
 # Mutating commands as "command subcommand"; later phases add to this.
 WRITE_COMMANDS = ["vars set", "redeploy", "restart", "rollback", "stop", "cancel", "deploy",
-                  "domain create", "env create", "project create"].freeze
+                  "domain create", "env create", "project create",
+                  "vars delete", "domain delete", "env delete", "project delete"].freeze
 
 HELP = <<~TEXT
   usage: railway [global options] <command> [options]
@@ -92,6 +96,7 @@ parser = OptionParser.new do |o|
   o.on("--custom HOST") { |v| opts[:custom] = v }
   o.on("--from ENV") { |v| opts[:from] = v }
   o.on("--workspace W") { |v| opts[:workspace] = v }
+  o.on("--confirm NAME") { |v| opts[:confirm] = v }
   o.on("-v", "--version") { opts[:version] = true }
   o.on("-h", "--help") { opts[:help] = true }
 end
@@ -127,7 +132,7 @@ begin
       result = handler.respond_to?(:run) ? handler.run(ctx) : handler.call(ctx)
       write_key = WRITE_COMMANDS.include?(command) ? command : [command, args.first].compact.join(" ")
       if result.zero? && WRITE_COMMANDS.include?(write_key)
-        url = opts[:dashboard_url] || begin
+        url = opts.key?(:dashboard_url) ? opts[:dashboard_url] : begin
           r = ctx.resolver
           svc = r.service(required: false)
           RailwayCli::Dashboard.url(r.project["id"], r.environment(required: false)&.fetch("id"), svc && svc["id"])

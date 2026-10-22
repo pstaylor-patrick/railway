@@ -38,7 +38,7 @@ module RailwayCli
                     node {
                       environmentId
                       latestDeployment { id status createdAt }
-                      domains { serviceDomains { domain } customDomains { domain } }
+                      domains { serviceDomains { id domain } customDomains { id domain } }
                     }
                   }
                 }
@@ -155,6 +155,26 @@ module RailwayCli
 
     PROJECT_CREATE = <<~GQL
       mutation ProjectCreate($input: ProjectCreateInput!) { projectCreate(input: $input) { id name } }
+    GQL
+
+    VARIABLE_DELETE = <<~GQL
+      mutation VariableDelete($input: VariableDeleteInput!) { variableDelete(input: $input) }
+    GQL
+
+    SERVICE_DOMAIN_DELETE = <<~GQL
+      mutation ServiceDomainDelete($id: String!) { serviceDomainDelete(id: $id) }
+    GQL
+
+    CUSTOM_DOMAIN_DELETE = <<~GQL
+      mutation CustomDomainDelete($id: String!) { customDomainDelete(id: $id) }
+    GQL
+
+    ENVIRONMENT_DELETE = <<~GQL
+      mutation EnvironmentDelete($id: String!) { environmentDelete(id: $id) }
+    GQL
+
+    PROJECT_DELETE = <<~GQL
+      mutation ProjectDelete($id: String!) { projectDelete(id: $id) }
     GQL
   end
 end

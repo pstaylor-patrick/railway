@@ -2,12 +2,13 @@
 
 require "railway_cli/commands/context"
 require "railway_cli/error"
+require "railway_cli/confirm"
 require "railway_cli/mask"
 require "railway_cli/queries"
 
 module RailwayCli
   module Commands
-    # vars (list), vars diff, vars set. vars delete lands with the Confirm helper.
+    # vars (list), vars diff, vars set, vars delete.
     module Variables
       STDIN_MARKER = "-"
 
@@ -17,7 +18,8 @@ module RailwayCli
         when nil, "list" then list(ctx)
         when "diff" then diff(ctx)
         when "set" then set(ctx, ctx.args.drop(1))
-        else raise UsageError, "unknown vars subcommand: #{sub} (list, diff, set)"
+        when "delete" then delete(ctx, ctx.args[1])
+        else raise UsageError, "unknown vars subcommand: #{sub} (list, diff, set, delete)"
         end
       end
 
@@ -53,6 +55,22 @@ module RailwayCli
           ctx.client.mutate(Queries::VARIABLE_COLLECTION_UPSERT, { "input" => input.merge("variables" => vars) })
         end
         ctx.emit("vars set", { "set" => vars.keys })
+      end
+
+      # Resolves the key first so a typo fails before the prompt.
+      def self.delete(ctx, key, confirm: Confirm)
+        raise UsageError, "vars delete needs KEY" if key.nil? || key.empty?
+
+        r = ctx.resolver
+        env = r.environment
+        raise UsageError, "no variable #{key} in #{env['name']}" unless fetch(ctx, env).key?(key)
+
+        confirm.require!(expected: key, kind: "variable", flag: ctx.opts[:confirm])
+        input = { "projectId" => r.project["id"], "environmentId" => env["id"], "name" => key }
+        svc = r.service(required: false)
+        input["serviceId"] = svc["id"] if svc
+        ctx.client.mutate(Queries::VARIABLE_DELETE, { "input" => input })
+        ctx.emit("vars delete", { "deleted" => key })
       end
 
       # ["A=1", "B=-"] -> {"A"=>"1", "B"=>stdin}. At most one KEY=- per call.

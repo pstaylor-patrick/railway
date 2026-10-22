@@ -2,17 +2,48 @@
 
 require "railway_cli/commands/context"
 require "railway_cli/error"
+require "railway_cli/confirm"
+require "railway_cli/commands/domains"
 require "railway_cli/queries"
 
 module RailwayCli
   module Commands
-    # domain create --service S [--custom HOST]. domain delete lands with the Confirm helper.
+    # domain create --service S [--custom HOST]; domain delete HOST.
     module Domain
       def self.run(ctx)
         sub = ctx.args.first
-        raise UsageError, "unknown domain subcommand: #{sub.inspect} (create)" unless sub == "create"
+        case sub
+        when "create" then create(ctx)
+        when "delete" then delete(ctx, ctx.args[1])
+        else raise UsageError, "unknown domain subcommand: #{sub.inspect} (create, delete)"
+        end
+      end
 
-        create(ctx)
+      # Finds HOST among the environment's service and custom domains, then confirms.
+      def self.delete(ctx, host)
+        raise UsageError, "domain delete needs HOST" if host.nil? || host.empty?
+
+        r = ctx.resolver
+        env = r.environment
+        only = r.service(required: false)
+        found = find(only ? [only] : r.services, env, r, host)
+        raise UsageError, "no domain #{host} in #{env['name']}" unless found
+
+        Confirm.require!(expected: host, kind: "domain", flag: ctx.opts[:confirm])
+        doc = found[:kind] == "custom" ? Queries::CUSTOM_DOMAIN_DELETE : Queries::SERVICE_DOMAIN_DELETE
+        ctx.client.mutate(doc, { "id" => found[:id] })
+        ctx.emit("domain delete", { "deleted" => host })
+      end
+
+      def self.find(svcs, env, resolver, host)
+        svcs.each do |s|
+          d = resolver.instance(s, env)&.dig("domains") || {}
+          { "custom" => d["customDomains"], "service" => d["serviceDomains"] }.each do |kind, list|
+            hit = Array(list).find { |x| x["domain"] == host }
+            return { kind: kind, id: hit["id"] } if hit
+          end
+        end
+        nil
       end
 
       def self.create(ctx)
