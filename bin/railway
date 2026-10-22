@@ -12,8 +12,9 @@ require "railway_cli/auth"
 require "railway_cli/formatter"
 require "railway_cli/client"
 require "railway_cli/resolver"
+require "railway_cli/dashboard"
 require "railway_cli/commands/whoami"
-%w[context projects project environments services status deployments domains volumes rate logs].each do |c|
+%w[context projects project environments services status deployments domains volumes rate logs variables].each do |c|
   require "railway_cli/commands/#{c}"
 end
 
@@ -28,11 +29,13 @@ COMMANDS = {
   "domains" => [RailwayCli::Commands::Domains, "service and custom domains --project --env [--service]"],
   "volumes" => [RailwayCli::Commands::Volumes, "volumes and backups --project"],
   "rate" => [RailwayCli::Commands::Rate, "last known rate-limit headers"],
-  "logs" => [RailwayCli::Commands::Logs, "--project --env --service [--build] [--deployment ID] [-n 200] [--filter Q] [-f] [--interval 3]"]
+  "logs" => [RailwayCli::Commands::Logs, "--project --env --service [--build] [--deployment ID] [-n 200] [--filter Q] [-f] [--interval 3]"],
+  "vars" => [RailwayCli::Commands::Variables,
+             "[--reveal] | vars diff --env A --env2 B | vars set KEY=VALUE|KEY=- [--skip-deploys]"]
 }.freeze
 
-# Mutating commands; later phases add to this.
-WRITE_COMMANDS = [].freeze
+# Mutating commands as "command subcommand"; later phases add to this.
+WRITE_COMMANDS = ["vars set"].freeze
 
 HELP = <<~TEXT
   usage: railway [global options] <command> [options]
@@ -69,6 +72,9 @@ parser = OptionParser.new do |o|
   o.on("--filter Q") { |v| opts[:filter] = v }
   o.on("-f", "--follow") { opts[:follow] = true }
   o.on("--interval SECONDS", Float) { |v| opts[:interval] = v }
+  o.on("--env2 ID") { |v| opts[:env2] = v }
+  o.on("--reveal") { opts[:reveal] = true }
+  o.on("--skip-deploys") { opts[:skip_deploys] = true }
   o.on("-v", "--version") { opts[:version] = true }
   o.on("-h", "--help") { opts[:help] = true }
 end
@@ -100,7 +106,14 @@ begin
       client = RailwayCli::Client.new(credential: RailwayCli::Auth.pick(ENV, project_token: opts[:project_token]))
       ctx = RailwayCli::Commands::Context.new(client: client, resolver: RailwayCli::Resolver.new(client, opts),
                                               opts: opts, args: args, out: $stdout)
-      COMMANDS.fetch(command).first.run(ctx)
+      result = COMMANDS.fetch(command).first.run(ctx)
+      if result.zero? && WRITE_COMMANDS.include?([command, args.first].compact.join(" "))
+        r = ctx.resolver
+        svc = r.service(required: false)
+        url = RailwayCli::Dashboard.url(r.project["id"], r.environment(required: false)&.fetch("id"), svc && svc["id"])
+        (opts[:json] ? $stderr : $stdout).puts "dashboard: #{url}"
+      end
+      result
     else
       warn "unknown command: #{command}"
       warn HELP

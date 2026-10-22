@@ -95,5 +95,21 @@ module RailwayCli
         }
       }
     GQL
+
+    VARIABLES = <<~GQL
+      query Variables($projectId: String!, $environmentId: String!, $serviceId: String) {
+        variables(projectId: $projectId, environmentId: $environmentId, serviceId: $serviceId)
+      }
+    GQL
+
+    VARIABLE_UPSERT = <<~GQL
+      mutation VariableUpsert($input: VariableUpsertInput!) { variableUpsert(input: $input) }
+    GQL
+
+    VARIABLE_COLLECTION_UPSERT = <<~GQL
+      mutation VariableCollectionUpsert($input: VariableCollectionUpsertInput!) {
+        variableCollectionUpsert(input: $input)
+      }
+    GQL
   end
 end
