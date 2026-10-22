@@ -14,7 +14,7 @@ require "railway_cli/client"
 require "railway_cli/resolver"
 require "railway_cli/dashboard"
 require "railway_cli/commands/whoami"
-%w[context projects project environments services status deployments domains volumes rate logs variables deploy domain environment project_write].each do |c|
+%w[context projects project environments services status deployments domains volumes rate logs variables deploy domain environment project_write gql].each do |c|
   require "railway_cli/commands/#{c}"
 end
 
@@ -39,7 +39,8 @@ COMMANDS = {
   "cancel" => [RailwayCli::Commands::DeploymentAction.for("cancel"), "cancel --deployment ID, or latest for --service"],
   "deploy" => [RailwayCli::Commands::Deploy, "deploy --service S | deploy --env E --all"],
   "domain" => [RailwayCli::Commands::Domain, "domain create --service S [--custom HOST] | domain delete HOST --env E [--confirm HOST]"],
-  "env" => [RailwayCli::Commands::Environment, "env create NAME --project P [--from E] | env delete NAME --project P [--confirm NAME]"]
+  "env" => [RailwayCli::Commands::Environment, "env create NAME --project P [--from E] | env delete NAME --project P [--confirm NAME]"],
+  "gql" => [RailwayCli::Commands::Gql, "[-f FILE | QUERY] [--vars JSON] [--write] [--confirm OPNAME]"]
 }.freeze
 
 # Subcommands routed away from a read command of the same name.
@@ -97,6 +98,9 @@ parser = OptionParser.new do |o|
   o.on("--from ENV") { |v| opts[:from] = v }
   o.on("--workspace W") { |v| opts[:workspace] = v }
   o.on("--confirm NAME") { |v| opts[:confirm] = v }
+  o.on("--vars JSON") { |v| opts[:vars] = v }
+  o.on("--file FILE") { |v| opts[:file] = v }
+  o.on("--write") { opts[:write] = true }
   o.on("-v", "--version") { opts[:version] = true }
   o.on("-h", "--help") { opts[:help] = true }
 end
@@ -110,6 +114,11 @@ rescue OptionParser::ParseError => e
   exit 2
 end
 
+# gql writes are write commands, but their target is unknown, so no dashboard link.
+if command == "gql" && opts[:write]
+  opts[:dashboard_url] = nil
+end
+write_commands = command == "gql" && opts[:write] ? WRITE_COMMANDS + ["gql"] : WRITE_COMMANDS
 command = "version" if opts[:version]
 command = "help" if opts[:help]
 
@@ -130,8 +139,8 @@ begin
                                               opts: opts, args: args, out: $stdout)
       handler = (SUBCOMMANDS[[command, args.first]] || COMMANDS.fetch(command)).first
       result = handler.respond_to?(:run) ? handler.run(ctx) : handler.call(ctx)
-      write_key = WRITE_COMMANDS.include?(command) ? command : [command, args.first].compact.join(" ")
-      if result.zero? && WRITE_COMMANDS.include?(write_key)
+      write_key = write_commands.include?(command) ? command : [command, args.first].compact.join(" ")
+      if result.zero? && write_commands.include?(write_key)
         url = opts.key?(:dashboard_url) ? opts[:dashboard_url] : begin
           r = ctx.resolver
           svc = r.service(required: false)
