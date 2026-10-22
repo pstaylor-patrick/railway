@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+files=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$files" ] && exit 0
+if git diff --cached --name-only | grep -E '(^|/)\.env($|\.)' | grep -v '\.env\.example$'; then
+  echo "refusing to commit an env file" >&2; exit 1
+fi
+ruby bin/leakguard $files
+if command -v gitleaks >/dev/null 2>&1; then gitleaks protect --staged --no-banner; fi

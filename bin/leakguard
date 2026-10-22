@@ -1,0 +1,50 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Scans tracked files (or the given files) for token-shaped values and
+# personal identifiers. Prints file:line and a pattern index, never the match.
+ROOT = File.expand_path("..", File.dirname(File.realpath(__FILE__)))
+
+BUILTIN = [
+  /(TOKEN|PAT|SECRET)\w*["']?\s*[:=]\s*["']?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+  /Bearer [A-Za-z0-9-]{20,}/
+].freeze
+BUILTIN_SKIP = %w[.env.example .leakguard.local.example docs/railway-schema.json].freeze
+PLACEHOLDER_UUID = "00000000-0000-0000-0000-000000000000"
+
+def pattern_lines(text)
+  text.to_s.lines.map(&:strip).reject { |l| l.empty? || l.start_with?("#") }
+end
+
+local_file = File.join(ROOT, ".leakguard.local")
+personal = pattern_lines(File.file?(local_file) ? File.read(local_file) : "")
+personal += pattern_lines(ENV["LEAKGUARD_PATTERNS"])
+personal = personal.map { |p| Regexp.new(p) }
+
+files = ARGV.empty? ? Dir.chdir(ROOT) { `git ls-files -z`.split("\0") } : ARGV
+hits = 0
+files.each do |file|
+  path = File.expand_path(file, ARGV.empty? ? ROOT : Dir.pwd)
+  next unless File.file?(path)
+  rel = ARGV.empty? ? file : file.sub(%r{\A\./}, "")
+  skip_builtin = BUILTIN_SKIP.include?(rel)
+  File.foreach(path).with_index(1) do |line, n|
+    line = line.scrub
+    unless skip_builtin
+      BUILTIN.each_with_index do |re, i|
+        m = line.match(re)
+        next unless m && !m[0].include?(PLACEHOLDER_UUID)
+        puts "#{rel}:#{n}: matched builtin-#{i}"
+        hits += 1
+      end
+    end
+    personal.each_with_index do |re, i|
+      next unless line.match?(re)
+      puts "#{rel}:#{n}: matched local-#{i}"
+      hits += 1
+    end
+  end
+rescue ArgumentError, Errno::EACCES
+  next
+end
+exit(hits.zero? ? 0 : 1)

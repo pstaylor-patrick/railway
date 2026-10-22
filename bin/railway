@@ -1,0 +1,28 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# realpath, not __dir__: the CLI runs through a ~/.local/bin/railway symlink.
+ROOT = File.expand_path("..", File.dirname(File.realpath(__FILE__)))
+$LOAD_PATH.unshift File.join(ROOT, "lib")
+
+require "railway_cli/version"
+
+HELP = <<~TEXT
+  usage: railway <command> [options]
+
+  Personal Railway CLI on the public GraphQL API.
+
+    --version   print version
+    help        show this help
+TEXT
+
+case ARGV.first
+when "--version", "-v", "version"
+  puts "railway-pat-cli #{RailwayCli::VERSION}"
+when nil, "help", "-h", "--help"
+  puts HELP
+else
+  warn "unknown command: #{ARGV.first}"
+  warn HELP
+  exit 2
+end
