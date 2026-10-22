@@ -80,5 +80,20 @@ module RailwayCli
         volumeInstanceBackupList(volumeInstanceId: $volumeInstanceId) { id name createdAt }
       }
     GQL
+    DEPLOYMENT_LOGS = <<~GQL
+      query DeploymentLogs($deploymentId: String!, $limit: Int, $filter: String, $startDate: DateTime) {
+        deploymentLogs(deploymentId: $deploymentId, limit: $limit, filter: $filter, startDate: $startDate) {
+          timestamp message severity
+        }
+      }
+    GQL
+
+    BUILD_LOGS = <<~GQL
+      query BuildLogs($deploymentId: String!, $limit: Int, $filter: String, $startDate: DateTime) {
+        buildLogs(deploymentId: $deploymentId, limit: $limit, filter: $filter, startDate: $startDate) {
+          timestamp message severity
+        }
+      }
+    GQL
   end
 end

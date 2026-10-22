@@ -13,7 +13,7 @@ require "railway_cli/formatter"
 require "railway_cli/client"
 require "railway_cli/resolver"
 require "railway_cli/commands/whoami"
-%w[context projects project environments services status deployments domains volumes rate].each do |c|
+%w[context projects project environments services status deployments domains volumes rate logs].each do |c|
   require "railway_cli/commands/#{c}"
 end
 
@@ -27,7 +27,8 @@ COMMANDS = {
   "deployments" => [RailwayCli::Commands::Deployments, "recent deployments --project --env --service [-n 10]"],
   "domains" => [RailwayCli::Commands::Domains, "service and custom domains --project --env [--service]"],
   "volumes" => [RailwayCli::Commands::Volumes, "volumes and backups --project"],
-  "rate" => [RailwayCli::Commands::Rate, "last known rate-limit headers"]
+  "rate" => [RailwayCli::Commands::Rate, "last known rate-limit headers"],
+  "logs" => [RailwayCli::Commands::Logs, "--project --env --service [--build] [--deployment ID] [-n 200] [--filter Q] [-f] [--interval 3]"]
 }.freeze
 
 # Mutating commands; later phases add to this.
@@ -63,6 +64,11 @@ parser = OptionParser.new do |o|
   o.on("--env ID") { |v| opts[:env] = v }
   o.on("--service ID") { |v| opts[:service] = v }
   o.on("-n", "--limit N", Integer) { |v| opts[:limit] = v }
+  o.on("--build") { opts[:build] = true }
+  o.on("--deployment ID") { |v| opts[:deployment] = v }
+  o.on("--filter Q") { |v| opts[:filter] = v }
+  o.on("-f", "--follow") { opts[:follow] = true }
+  o.on("--interval SECONDS", Float) { |v| opts[:interval] = v }
   o.on("-v", "--version") { opts[:version] = true }
   o.on("-h", "--help") { opts[:help] = true }
 end
