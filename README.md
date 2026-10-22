@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/hero.gif" width="720" alt="Terminal session running railway whoami, status, vars, and a delete refused until --confirm names the environment"></p>
+
 # railway
 
 A personal Railway CLI on the public GraphQL API
@@ -84,6 +86,15 @@ ruby bin/leakguard
 
 `.leakguard.local` is git-ignored. CI reads the same patterns from the
 `LEAKGUARD_PATTERNS` secret.
+
+## Demo GIF
+
+`docs/hero.gif` is rendered from canned placeholder output by
+`scripts/hero-gif.mjs` (needs ffmpeg):
+
+```
+npx -y -p playwright@1.63.0 node scripts/hero-gif.mjs
+```
 
 ## Schema refresh
 
