@@ -111,5 +111,50 @@ module RailwayCli
         variableCollectionUpsert(input: $input)
       }
     GQL
+
+    DEPLOYMENT_MUTATIONS = {
+      "redeploy" => "mutation DeploymentRedeploy($id: String!) { deploymentRedeploy(id: $id) { id status } }",
+      "restart" => "mutation DeploymentRestart($id: String!) { deploymentRestart(id: $id) }",
+      "rollback" => "mutation DeploymentRollback($id: String!) { deploymentRollback(id: $id) }",
+      "stop" => "mutation DeploymentStop($id: String!) { deploymentStop(id: $id) }",
+      "cancel" => "mutation DeploymentCancel($id: String!) { deploymentCancel(id: $id) }"
+    }.freeze
+
+    SERVICE_INSTANCE_DEPLOY = <<~GQL
+      mutation ServiceInstanceDeploy($serviceId: String!, $environmentId: String!) {
+        serviceInstanceDeploy(serviceId: $serviceId, environmentId: $environmentId)
+      }
+    GQL
+
+    ENVIRONMENT_TRIGGERS_DEPLOY = <<~GQL
+      mutation EnvironmentTriggersDeploy($input: EnvironmentTriggersDeployInput!) {
+        environmentTriggersDeploy(input: $input)
+      }
+    GQL
+
+    CUSTOM_DOMAIN_AVAILABLE = <<~GQL
+      query CustomDomainAvailable($domain: String!) { customDomainAvailable(domain: $domain) { available message } }
+    GQL
+
+    SERVICE_DOMAIN_CREATE = <<~GQL
+      mutation ServiceDomainCreate($input: ServiceDomainCreateInput!) { serviceDomainCreate(input: $input) { id domain } }
+    GQL
+
+    CUSTOM_DOMAIN_CREATE = <<~GQL
+      mutation CustomDomainCreate($input: CustomDomainCreateInput!) {
+        customDomainCreate(input: $input) {
+          id domain
+          status { dnsRecords { recordType hostlabel fqdn requiredValue } }
+        }
+      }
+    GQL
+
+    ENVIRONMENT_CREATE = <<~GQL
+      mutation EnvironmentCreate($input: EnvironmentCreateInput!) { environmentCreate(input: $input) { id name } }
+    GQL
+
+    PROJECT_CREATE = <<~GQL
+      mutation ProjectCreate($input: ProjectCreateInput!) { projectCreate(input: $input) { id name } }
+    GQL
   end
 end

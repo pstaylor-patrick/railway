@@ -14,7 +14,7 @@ require "railway_cli/client"
 require "railway_cli/resolver"
 require "railway_cli/dashboard"
 require "railway_cli/commands/whoami"
-%w[context projects project environments services status deployments domains volumes rate logs variables].each do |c|
+%w[context projects project environments services status deployments domains volumes rate logs variables deploy domain environment project_write].each do |c|
   require "railway_cli/commands/#{c}"
 end
 
@@ -31,11 +31,23 @@ COMMANDS = {
   "rate" => [RailwayCli::Commands::Rate, "last known rate-limit headers"],
   "logs" => [RailwayCli::Commands::Logs, "--project --env --service [--build] [--deployment ID] [-n 200] [--filter Q] [-f] [--interval 3]"],
   "vars" => [RailwayCli::Commands::Variables,
-             "[--reveal] | vars diff --env A --env2 B | vars set KEY=VALUE|KEY=- [--skip-deploys]"]
+             "[--reveal] | vars diff --env A --env2 B | vars set KEY=VALUE|KEY=- [--skip-deploys]"],
+  "redeploy" => [RailwayCli::Commands::DeploymentAction.for("redeploy"), "redeploy --deployment ID, or latest for --service"],
+  "restart" => [RailwayCli::Commands::DeploymentAction.for("restart"), "restart --deployment ID, or latest for --service"],
+  "rollback" => [RailwayCli::Commands::DeploymentAction.for("rollback"), "roll back to --deployment ID, or latest for --service"],
+  "stop" => [RailwayCli::Commands::DeploymentAction.for("stop"), "stop --deployment ID, or latest for --service"],
+  "cancel" => [RailwayCli::Commands::DeploymentAction.for("cancel"), "cancel --deployment ID, or latest for --service"],
+  "deploy" => [RailwayCli::Commands::Deploy, "deploy --service S | deploy --env E --all"],
+  "domain" => [RailwayCli::Commands::Domain, "domain create --service S [--custom HOST]"],
+  "env" => [RailwayCli::Commands::Environment, "env create NAME --project P [--from E]"]
 }.freeze
 
+# Subcommands routed away from a read command of the same name.
+SUBCOMMANDS = { %w[project create] => [RailwayCli::Commands::ProjectWrite, "project create NAME [--workspace W]"] }.freeze
+
 # Mutating commands as "command subcommand"; later phases add to this.
-WRITE_COMMANDS = ["vars set"].freeze
+WRITE_COMMANDS = ["vars set", "redeploy", "restart", "rollback", "stop", "cancel", "deploy",
+                  "domain create", "env create", "project create"].freeze
 
 HELP = <<~TEXT
   usage: railway [global options] <command> [options]
@@ -50,7 +62,8 @@ HELP = <<~TEXT
 
   Commands:
     whoami        report each token's type and identity
-    #{COMMANDS.map { |n, (_, h)| format("%-13s %s", n, h) }.join("\n    ")}
+    #{COMMANDS.map { |n, (_, h)| format("%-13s %s", n, h) }.join("\n  ")}
+    #{SUBCOMMANDS.map { |n, (_, h)| format("%-13s %s", n.first, h) }.join("\n  ")}
     --version   print version
     help        show this help
 TEXT
@@ -75,6 +88,10 @@ parser = OptionParser.new do |o|
   o.on("--env2 ID") { |v| opts[:env2] = v }
   o.on("--reveal") { opts[:reveal] = true }
   o.on("--skip-deploys") { opts[:skip_deploys] = true }
+  o.on("--all") { opts[:all] = true }
+  o.on("--custom HOST") { |v| opts[:custom] = v }
+  o.on("--from ENV") { |v| opts[:from] = v }
+  o.on("--workspace W") { |v| opts[:workspace] = v }
   o.on("-v", "--version") { opts[:version] = true }
   o.on("-h", "--help") { opts[:help] = true }
 end
@@ -106,12 +123,18 @@ begin
       client = RailwayCli::Client.new(credential: RailwayCli::Auth.pick(ENV, project_token: opts[:project_token]))
       ctx = RailwayCli::Commands::Context.new(client: client, resolver: RailwayCli::Resolver.new(client, opts),
                                               opts: opts, args: args, out: $stdout)
-      result = COMMANDS.fetch(command).first.run(ctx)
-      if result.zero? && WRITE_COMMANDS.include?([command, args.first].compact.join(" "))
-        r = ctx.resolver
-        svc = r.service(required: false)
-        url = RailwayCli::Dashboard.url(r.project["id"], r.environment(required: false)&.fetch("id"), svc && svc["id"])
-        (opts[:json] ? $stderr : $stdout).puts "dashboard: #{url}"
+      handler = (SUBCOMMANDS[[command, args.first]] || COMMANDS.fetch(command)).first
+      result = handler.respond_to?(:run) ? handler.run(ctx) : handler.call(ctx)
+      write_key = WRITE_COMMANDS.include?(command) ? command : [command, args.first].compact.join(" ")
+      if result.zero? && WRITE_COMMANDS.include?(write_key)
+        url = opts[:dashboard_url] || begin
+          r = ctx.resolver
+          svc = r.service(required: false)
+          RailwayCli::Dashboard.url(r.project["id"], r.environment(required: false)&.fetch("id"), svc && svc["id"])
+        rescue RailwayCli::UsageError
+          nil # e.g. --deployment ID with no --project: the write succeeded, there is just no link
+        end
+        (opts[:json] ? $stderr : $stdout).puts "dashboard: #{url}" if url
       end
       result
     else
