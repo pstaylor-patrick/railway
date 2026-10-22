@@ -106,4 +106,10 @@ class ConfirmTest < Minitest::Test
     _out, _err, status = Open3.capture3("ruby", bin, "env", "delete", "tmp-x", "--project", "web", "--yes", stdin_data: "")
     assert_equal 2, status.exitstatus
   end
+
+  def test_exit_codes
+    assert_equal 3, RailwayCli.exit_code(Refused.new("no"))
+    assert_equal 2, RailwayCli.exit_code(RailwayCli::UsageError.new("no such environment"))
+    assert_equal 1, RailwayCli.exit_code(RailwayCli::ApiError.new("boom"))
+  end
 end

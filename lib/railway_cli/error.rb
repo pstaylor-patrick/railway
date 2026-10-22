@@ -20,6 +20,16 @@ module RailwayCli
     end
   end
 
+  # Process exit status for an error: 2 usage (including names that do not
+  # resolve), 3 confirmation refused, 1 anything else.
+  def self.exit_code(error)
+    case error
+    when UsageError then 2
+    when ConfirmRefused then 3
+    else 1
+    end
+  end
+
   class Error < StandardError
     def message = Redact.call(super)
     def code = nil

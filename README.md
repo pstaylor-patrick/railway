@@ -68,6 +68,13 @@ Global options: `-j/--json`, `--project-token`, `--project NAME|ID`,
 Deletes require typing the resource name, or `--confirm <name>` when there is no
 TTY. Run `railway help` for every option.
 
+## Exit codes
+
+- 0: success
+- 1: API, auth, or network error
+- 2: usage error, including a `--project`, `--env`, `--service`, or delete target that does not resolve (nothing is deleted)
+- 3: delete refused because the name was not confirmed
+
 ## Leak guard
 
 ```bash

@@ -163,5 +163,5 @@ rescue RailwayCli::Error => e
   else
     warn "error: #{e.message}"
   end
-  exit(e.is_a?(RailwayCli::UsageError) ? 2 : e.is_a?(RailwayCli::ConfirmRefused) ? 3 : 1)
+  exit RailwayCli.exit_code(e)
 end
